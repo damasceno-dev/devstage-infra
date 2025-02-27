@@ -1,3 +1,5 @@
+Getting the .secrets file in base64 format: base64 -i .secrets
+
 Using act to test the script locally
 deploy:
 on terraform folder: act -s ENCODED_SECRETS="$(base64 -i .secrets | tr -d '\n')" --container-architecture linux/amd64

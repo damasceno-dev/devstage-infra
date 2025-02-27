@@ -5,7 +5,7 @@ To run any workflow, configure the .secrets file:
 
 Deploy workflow:
 It runs on every commit.
-If it is the first run, use the following outputs to configure the deploy of the ecr image:
+If it is the first run, use the following outputs to configure the deploy of the backend image:
     echo "ECR Repository URL: $ECR_REPOSITORY_URL"
     echo "RDS Endpoint: $RDS_ENDPOINT"
 

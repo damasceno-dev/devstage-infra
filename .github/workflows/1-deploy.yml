@@ -139,13 +139,13 @@ jobs:
         working-directory: 2-resources
         run: |
           echo "RDS_ENDPOINT=$(terraform output -raw rds_endpoint)" >> $GITHUB_ENV
-          echo "S3_BUCKET_NAME=$(terraform output -raw s3_bucket_name)" >> $GITHUB_ENV
-          echo "SQS_DELETE_USER_URL=$(terraform output -raw sqs_queue_url)" >> $GITHUB_ENV
           echo "ECR_URL=$(terraform output -raw ecr_repository_url)" >> $GITHUB_ENV
+#          echo "S3_BUCKET_NAME=$(terraform output -raw s3_bucket_name)" >> $GITHUB_ENV
+#          echo "SQS_DELETE_USER_URL=$(terraform output -raw sqs_queue_url)" >> $GITHUB_ENV
 
       - name: Use Terraform Outputs
         run: |
           echo "RDS Endpoint: $RDS_ENDPOINT"
-          echo "S3 BUCKET NAME: $S3_BUCKET_NAME"
-          echo "SQS Delete User URL: $SQS_DELETE_USER_URL"
           echo "ECR Repository URL: $ECR_URL"
+#          echo "S3 BUCKET NAME: $S3_BUCKET_NAME"
+#          echo "SQS Delete User URL: $SQS_DELETE_USER_URL"
