@@ -1,0 +1,5 @@
+Using act to test the script locally
+deploy:
+on terraform folder: act -s ENCODED_SECRETS="$(base64 -i .secrets | tr -d '\n')" --container-architecture linux/amd64
+destroy:
+on terraform folder: act -s ENCODED_SECRETS="$(base64 -i .secrets | tr -d '\n')" --container-architecture linux/amd64 -W .github/workflows/destroy.yml

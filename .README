@@ -1,0 +1,20 @@
+To run any workflow, configure the .secrets file:
+    1) Fill the file .secrets using the example from .secrets.example
+    2) Export this file to base64: base64 -i .secrets
+    3) add a variable ENCODED_SECRETS in github secrets with the value of the previous step
+
+Deploy workflow:
+It runs on every commit.
+If it is the first run, use the following outputs to configure the deploy of the ecr image:
+    echo "ECR Repository URL: $ECR_REPOSITORY_URL"
+    echo "RDS Endpoint: $RDS_ENDPOINT"
+
+App runner workflow:
+After running the deploy workflow and deploying the backed, run the app runner workflow manually in github:
+1) Go to your GitHub repo → Click on “Actions”. On the left sidebar, locate “app-runner.yml”.
+2) Click “Run workflow” (usually a dropdown button) and confirm.
+
+Destroy workflow:
+Same steps from above, it also needs to be triggered manually in github:
+1) Go to your GitHub repo → Click on “Actions”. On the left sidebar, locate “destroy.yml”.
+2) Click “Run workflow” (usually a dropdown button) and confirm.

@@ -1,0 +1,64 @@
+name: "Deploy AWS App Runner"
+
+on:
+  workflow_dispatch:  # Allows manual execution
+      
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform_app_runner:
+    name: "3-Terraform App Runner"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.ENCODED_SECRETS }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Resources Creator Environment Variables and Create tfvars
+        run: |
+          export $(cat .secrets | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "AWS_RESOURCES_CREATOR_ACCESS_KEY_ID=${AWS_RESOURCES_CREATOR_ACCESS_KEY_ID}" >> $GITHUB_ENV
+          echo "AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY=${AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+
+      - name: Install Dependencies (Resources) - unzip & ca-certificates
+        run: |
+          if [[ "$GITHUB_ACTIONS" == "true" ]]; then
+            sudo apt-get update && sudo apt-get install -y unzip ca-certificates
+          else
+            apt-get update && apt-get install -y unzip ca-certificates
+          fi
+
+      - name: Setup Terraform (Resources)
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Configure AWS Credentials (Resources)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ env.AWS_RESOURCES_CREATOR_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init & Apply (3-AppRunner)
+        working-directory: 3-apprunner
+        run: |
+          terraform init -reconfigure
+          terraform apply -auto-approve
+
+      - name: Retrieve Terraform Outputs
+        id: tf_outputs
+        working-directory: 3-apprunner
+        run: |
+          echo "APP_RUNNER_URL=$(terraform output -raw app_runner_service_url)" >> $GITHUB_ENV
+
+      - name: Use Terraform Outputs
+        run: |
+          echo "App Runner URL: $APP_RUNNER_URL"

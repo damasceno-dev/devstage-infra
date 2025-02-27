@@ -1,0 +1,162 @@
+name: "Destroy"
+
+on:
+  workflow_dispatch:  # Allows manual execution
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform_apprunner_destroy:
+    name: "1 - Terraform App Runner Destroy"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.ENCODED_SECRETS }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Environment Variables
+        run: |
+          export $(cat .secrets | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "AWS_RESOURCES_CREATOR_ACCESS_KEY_ID=${AWS_RESOURCES_CREATOR_ACCESS_KEY_ID}" >> $GITHUB_ENV
+          echo "AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY=${AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+
+      - name: Install Dependencies (unzip and ca-certificates)
+        run: |
+          if [[ "$GITHUB_ACTIONS" == "true" ]]; then
+            sudo apt-get update && sudo apt-get install -y unzip ca-certificates
+          else
+            apt-get update && apt-get install -y unzip ca-certificates
+          fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Configure AWS Credentials (App Runner)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ env.AWS_RESOURCES_CREATOR_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init & Destroy (3-AppRunner)
+        working-directory: 3-apprunner
+        run: |
+          terraform init -reconfigure
+          terraform destroy -auto-approve
+  terraform_resources_destroy:
+    name: "2 - Terraform Resources Destroy"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.ENCODED_SECRETS }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Resources Creator Environment Variables and Create tfvars
+        run: |
+          export $(cat .secrets | xargs)
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "AWS_RESOURCES_CREATOR_ACCESS_KEY_ID=${AWS_RESOURCES_CREATOR_ACCESS_KEY_ID}" >> $GITHUB_ENV
+          echo "AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY=${AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+          echo "TF_VAR_DB_PASSWORD=${TF_VAR_DB_PASSWORD}" >> $GITHUB_ENV
+          # Create a tfvars file for the resources step.
+          # The tfvars file includes the prefix from the admin step and the DB password for RDS
+          cat <<EOF > 2-resources/terraform.tfvars
+          db_password = "${TF_VAR_DB_PASSWORD}"
+          EOF
+
+      - name: Install Dependencies (unzip and ca-certificates)
+        run: |
+          if [[ "$GITHUB_ACTIONS" == "true" ]]; then
+            sudo apt-get update && sudo apt-get install -y unzip ca-certificates
+          else
+            apt-get update && apt-get install -y unzip ca-certificates
+          fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Configure AWS Credentials (Resources)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ env.AWS_RESOURCES_CREATOR_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_RESOURCES_CREATOR_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init & Destroy (2-Resources)
+        working-directory: 2-resources
+        run: |
+          if [ -f "terraform.tfstate" ]; then
+            terraform init -migrate-state -force-copy
+          else
+            terraform init -reconfigure
+          fi
+          terraform destroy -auto-approve -var-file=terraform.tfvars
+  terraform_admin_destroy:
+    name: "3 - Terraform Admin Destroy"
+    runs-on: ubuntu-latest
+    needs: terraform_resources_destroy
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .secrets file
+        run: |
+          echo "${{ secrets.ENCODED_SECRETS }}" | base64 -d > .secrets
+          chmod 600 .secrets
+
+      - name: Load Environment Variables and Create tfvars
+        run: |
+          # Load environment variables from .secrets
+          export $(cat .secrets | xargs)
+          # Persist AWS credentials for subsequent steps
+          echo "AWS_REGION=${AWS_REGION}" >> $GITHUB_ENV
+          echo "AWS_ADMIN_ACCESS_KEY_ID=${AWS_ADMIN_ACCESS_KEY_ID}" >> $GITHUB_ENV
+          echo "AWS_ADMIN_SECRET_ACCESS_KEY=${AWS_ADMIN_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+          echo "TF_VAR_PREFIX=${TF_VAR_PREFIX}" >> $GITHUB_ENV
+          echo "TF_VAR_RESOURCES_CREATOR_PROFILE=${TF_VAR_RESOURCES_CREATOR_PROFILE}" >> $GITHUB_ENV
+          # Create Terraform variable file using workflow inputs or secret defaults
+          cat <<EOF > 1-admin/terraform.tfvars
+          prefix = "${TF_VAR_PREFIX}"
+          resources_creator_profile = "${TF_VAR_RESOURCES_CREATOR_PROFILE}"
+          EOF
+
+      - name: Install Dependencies (unzip and ca-certificates)
+        run: |
+          if [[ "$GITHUB_ACTIONS" == "true" ]]; then
+            sudo apt-get update && sudo apt-get install -y unzip ca-certificates
+          else
+            apt-get update && apt-get install -y unzip ca-certificates
+          fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Configure AWS Credentials (Admin)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ env.AWS_ADMIN_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_ADMIN_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init & Destroy (1-Admin)
+        working-directory: 1-admin
+        run: |
+          terraform init -reconfigure
+          terraform destroy -auto-approve -var-file=terraform.tfvars
